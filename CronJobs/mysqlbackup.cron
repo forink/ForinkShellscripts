@@ -1,0 +1,106 @@
+#!/bin/sh
+#$ mysqlbackup.cron, v1.2, 2016/07/21 By forink $
+# Half-Daily Dump MySQL DB Script
+CRON_NAME="mysqlbackup.cron"
+AUTH_PASS_FILE="/root/.my.cnf"
+TODAY=$(date +"%Y%m%d")
+TODAY_HOURS=$(date +"%Y%m%d%H")
+NOW=$(date +"%Y%m%d_%H%M%S")
+KEEP_OLD_FILE_NUM="24"
+FILE_TYPE="tgz"
+LOG_PATH="/var/log/cron-exe/"${CRON_NAME}"_"${TODAY}".log"
+DUMP_DEST_PATH="/tmp"
+NEWEST_BACKUP_PATH="/home/forink/NewestBackup"
+BACKUP_DEST_PATH="/backup/Dropbox/CentOS_Server_Backup/mysqldata"
+BACKUP_FILE_PREFIX="MySQLBackup"
+BACKUP_FILE_NAME=${BACKUP_FILE_PREFIX}"_"${NOW}"."${FILE_TYPE}
+BACKUP_TMP_FOLDER=${BACKUP_FILE_PREFIX}"_"${TODAY_HOURS}
+EXE_RESULT="SUCCESS"
+
+function LOG_ECHO(){
+	ECHO_MSG=$1
+	LOG_TIME=$(date +"%Y-%m-%d %H:%M:%S")
+	echo "${LOG_TIME}  ${ECHO_MSG}" | tee -a ${LOG_PATH}
+}
+
+function LOG_ECHO_CHECK(){
+	ECHO_MSG_SUCCESS=$1
+	ECHO_MSG_FAIL=$2
+	ISOK=$3
+	ECHO_ALL_MSG=""
+	LOG_TIME=$(date +"%Y-%m-%d %H:%M:%S")
+
+	if [ ${ISOK} == 0 ]; then
+		echo "${LOG_TIME}  ${ECHO_MSG_SUCCESS}" | tee -a ${LOG_PATH}
+	else
+		echo "[ERROR_CODE=${ISOK}] ${ECHO_MSG_FAIL}"  | tee -a ${LOG_PATH}
+		EXE_RESULT="FAILURE"
+	fi
+}
+
+LOG_ECHO ${CRON_NAME}" job start..."
+
+if [ -d ${DUMP_DEST_PATH} ]; then
+	
+	# Clean Old Backup
+	LOG_ECHO "Check old backup..."
+	cd ${BACKUP_DEST_PATH}
+	N=`ls -1|grep -e "[0-9]"|wc -l`
+	if [ ${N} -gt ${KEEP_OLD_FILE_NUM} ]; then
+		LOG_ECHO "Removing old backup..."
+		ls -1 | grep -e '[0-9]'|sort -nr|tail -`expr ${N} - ${KEEP_OLD_FILE_NUM}` | xargs rm -r
+		LOG_ECHO "Removing old backup finished."
+	else
+		LOG_ECHO "PASS: No backup too old."
+	fi
+
+	# Dump MySQL
+	cd ${DUMP_DEST_PATH}
+	mkdir -p ${BACKUP_TMP_FOLDER}
+	cd ${BACKUP_TMP_FOLDER}	
+	if [ -f ${AUTH_PASS_FILE} ]; then
+
+		LOG_ECHO "MySQL backup start..."
+		# Begin of Dump CMD ===================================================================
+		mysqldump --defaults-file=${AUTH_PASS_FILE} forink_dbblog > forink_dbblog.sql
+		LOG_ECHO_CHECK "DB:forink_dbblog dump success." "DB:forink_dbblog dump fail."	$?
+		mysqldump --defaults-file=${AUTH_PASS_FILE} forink_dbtechblog > forink_dbtechblog.sql
+		LOG_ECHO_CHECK "DB:forink_dbtechblog dump success." "DB:forink_dbtechblog dump fail." $?
+		# End of Dump CMD =====================================================================
+		LOG_ECHO "MySQL backup finished."
+
+		#Remove and Sync
+		cd ${DUMP_DEST_PATH}
+		LOG_ECHO "Creating compressed backups..."
+		tar -czf ${BACKUP_FILE_NAME} ${BACKUP_TMP_FOLDER}
+		LOG_ECHO_CHECK "File: ${BACKUP_FILE_NAME} compressed successfully." "File: ${BACKUP_FILE_NAME} compressed fail." $?
+
+		LOG_ECHO "Remove the tmp files and sync to backup device start..."
+		if [ -d ${BACKUP_DEST_PATH} ]; then
+			
+			IDX=0
+			ISCP_OK=1
+			until [[ ${ISCP_OK} == 0 || ${IDX} > 10 ]]
+			do 
+				IDX=$((${IDX}+1))
+				cp -f ${BACKUP_FILE_NAME} ${BACKUP_DEST_PATH}"/"${BACKUP_FILE_NAME}
+				ISCP_OK=$?
+				LOG_ECHO_CHECK "Copy backup files to destination success." "FAIL: Unable to copy the backup files." ${ISCP_OK}
+			done
+	
+			rm -R ${BACKUP_TMP_FOLDER}
+			mv -f ${BACKUP_FILE_NAME} ${NEWEST_BACKUP_PATH}"/Newest_"${BACKUP_FILE_PREFIX}"."${FILE_TYPE}
+			LOG_ECHO_CHECK "The tmp files removed." "FAIL: The tmp files remove fail." $?
+
+			LOG_ECHO "All backup jobs finished."
+		else
+			LOG_ECHO "FAIL: Unable to access the backup destination path."
+		fi
+	else
+		LOG_ECHO "FAIL: Permission passport does not exist."
+	fi
+else
+	LOG_ECHO "FAIL: Dump destination does not exist."
+fi
+
+LOG_ECHO ${EXE_RESULT}
