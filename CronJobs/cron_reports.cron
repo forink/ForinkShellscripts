@@ -1,0 +1,43 @@
+#!/bin/bash
+#$ cron_report.cron, v1.0, 2015/03/24 By forink $
+# Daily Late
+CRON_NAME="cron_report.cron"
+TODAY=$(date +"%Y%m%d")
+TODAY_HOURS=$(date +"%Y%m%d%H")
+NOW=$(date +"%Y%m%d_%H%M%S")
+LOG_PATH="/var/log/"${CRON_NAME}"_"${TODAY}".log"
+CRONLOG_PATH="/var/log/cron-exe"
+MAIL_SUBJECT="System daily backup status reports [${TODAY}]"
+MAIL_TO="user@gmail.com"
+MAIL_CONTENTS=""
+ATTACH_CMD=""
+
+#本文內容
+MAIL_CONTENTS="* System daily backup status reports ["$(date +"%Y-%m-%d")"] \n"
+MAIL_CONTENTS+="================================================ \n"
+
+cd ${CRONLOG_PATH}
+RPT_FILE_LIST=$(ls ${CRONLOG_PATH} | grep ${TODAY})
+echo "Search the logs of backup execution......... "${RPT_FILE_LIST}
+echo "Check the execution result........."
+for log_fn in ${RPT_FILE_LIST}
+do	
+	#取得每個LOG的執行狀態
+	EXE_STATUS=$(sed -e '/^[<blank><tab>]*$/d' ${log_fn} | sed -n -e '$p' | awk 'NF>1{print $NF}')
+	#取得Cron Job名稱
+	CRON_NAME=`echo ${log_fn} | awk -F'_' '{print $1}'`
+	#組合信件內容（執行項目與結果）
+	MAIL_CONTENTS+=${CRON_NAME}" : "${EXE_STATUS}"\n"
+	#載入附件LOG檔
+	ATTACH_CMD+=`echo " uuencode "${log_fn}" "${log_fn}";"`
+	#畫面輸出執行結果
+	echo "Check "${CRON_NAME}"......"${EXE_STATUS}
+done
+MAIL_CONTENTS+="================================================ \n"
+
+# 寄出含附件之報告信件
+echo "Send notification email........."
+(echo | sed "i${MAIL_CONTENTS}" ; eval $ATTACH_CMD) | mailx -v -s "${MAIL_SUBJECT}" ${MAIL_TO}
+
+# 寄件是否成功
+echo "DONE."
