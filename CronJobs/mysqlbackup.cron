@@ -62,10 +62,10 @@ if [ -d ${DUMP_DEST_PATH} ]; then
 
 		LOG_ECHO "MySQL backup start..."
 		# Begin of Dump CMD ===================================================================
-		mysqldump --defaults-file=${AUTH_PASS_FILE} forink_dbblog > forink_dbblog.sql
-		LOG_ECHO_CHECK "DB:forink_dbblog dump success." "DB:forink_dbblog dump fail."	$?
-		mysqldump --defaults-file=${AUTH_PASS_FILE} forink_dbtechblog > forink_dbtechblog.sql
-		LOG_ECHO_CHECK "DB:forink_dbtechblog dump success." "DB:forink_dbtechblog dump fail." $?
+		mysqldump --defaults-file=${AUTH_PASS_FILE} target_database01 > target_database01.sql
+		LOG_ECHO_CHECK "DB:target_database01 dump success." "DB:target_database01 dump fail."	$?
+		mysqldump --defaults-file=${AUTH_PASS_FILE} target_database02 > target_database02.sql
+		LOG_ECHO_CHECK "DB:target_database02 dump success." "DB:target_database02 dump fail." $?
 		# End of Dump CMD =====================================================================
 		LOG_ECHO "MySQL backup finished."
 
